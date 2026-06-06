@@ -1,0 +1,6 @@
+Deleted files during cleanup:
+
+- src/structs/texts.py
+- src/structs/labels.py
+
+These legacy files were removed because they were no longer used by the current image classification implementation and contained old text-classification schema definitions.
