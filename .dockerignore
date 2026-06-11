@@ -1,0 +1,44 @@
+# Entornos virtuales
+.venv/
+env/
+venv/
+ENV/
+
+# Caché de Python y Testing
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Herramientas de desarrollo / IDEs
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker (Evita clonar configuraciones locales)
+Dockerfile
+.dockerignore
+
+# Test y desarrollo
+tests/
+pytest.ini
+dev-requirements.txt
+setup.py
+*.code-workspace
+
+# Documentación
+docs/
+README.md
+*.md
+
+# Logs y datos de entrenamiento (NO es necesario para inferencia)
+models/
+deleted_files.txt

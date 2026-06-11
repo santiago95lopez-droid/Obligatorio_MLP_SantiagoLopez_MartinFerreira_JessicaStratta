@@ -1,29 +1,51 @@
-# Use the official Python image as base
-FROM python:3.11-slim
+# --- Etapa 1: Constructor (Builder) ---
+FROM python:3.11-slim AS builder
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV POETRY_NO_INTERACTION=1
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies
+# Instalamos dependencias del sistema necesarias SOLO para compilar
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         gcc \
         g++ \
-        && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY ./requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+# Instalamos Poetry y el plugin para exportar
+RUN pip install --no-cache-dir poetry \
+    && poetry self add poetry-plugin-export
 
-# Copy the application code into the container
-COPY ./src /app/
+# Copiamos solo los archivos de configuración de dependencias
+COPY pyproject.toml poetry.lock* /app/
 
-# Expose port 8080 to the outside world
+# Exportamos las dependencias de producción sin hashes y construimos los wheels
+RUN poetry export -f requirements.txt --output requirements.txt --without-hashes \
+    && python -m pip wheel --wheel-dir=/app/wheels -r requirements.txt
+
+
+# --- Etapa 2: Runtime (Runtime) ---
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Copiamos los wheels pre-compilados y el requirements del builder
+COPY --from=builder /app/wheels /app/wheels
+COPY --from=builder /app/requirements.txt /app/requirements.txt
+
+# Instalamos las dependencias desde los wheels (sin compilar)
+RUN pip install --no-cache-dir --no-index --find-links=/app/wheels -r requirements.txt \
+    && rm -rf /app/wheels
+
+# Copiamos SOLO los archivos necesarios para ejecutar la app
+COPY src /app/src
+COPY modelohongos /app/modelohongos
+
 EXPOSE 8080
 
-# Command to run the application
-CMD ["python", "-m", "src.api.app"]
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8080"]

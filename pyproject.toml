@@ -8,8 +8,6 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "torch",
-    "torchvision",
     "fastapi (>=0.136.0,<0.137.0)",
     "uvicorn (>=0.44.0,<0.45.0)",
     "python-multipart (>=0.0.5,<1.0.0)",
@@ -18,6 +16,7 @@ dependencies = [
     "pytest (>=9.0.3,<10.0.0)",
     "numpy (>=1.26.0,<2.0.0)",
     "Pillow (>=10.0.0,<11.0.0)",
+    "PyYAML (>=6.0,<7.0)",
     "tensorflow (>=2.0.0,<3.0.0)"
 ]
 
