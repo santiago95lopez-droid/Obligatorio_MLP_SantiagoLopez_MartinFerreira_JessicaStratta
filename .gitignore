@@ -1,0 +1,16 @@
+# Ignorar todas las imágenes dentro de las carpetas de hongos
+edible-mushrooms/**/*.jpg
+edible-mushrooms/**/*.jpeg
+edible-mushrooms/**/*.png
+
+inedible-mushrooms/**/*.jpg
+inedible-mushrooms/**/*.jpeg
+inedible-mushrooms/**/*.png
+
+poisonous-mushrooms/**/*.jpg
+poisonous-mushrooms/**/*.jpeg
+poisonous-mushrooms/**/*.png
+
+# Ignorar si se crean carpetas de caché de Python o de entorno local si no las deseas
+__pycache__/
+.venv/
