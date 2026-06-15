@@ -31,6 +31,9 @@ if not exist ".venv\Scripts\python.exe" (
 echo Iniciando API desde el Python del entorno local...
 start "API Server" cmd /k ".venv\Scripts\python.exe -m uvicorn src.api.app:app --host 0.0.0.0 --port 8080"
 
+echo Iniciando Streamlit en paralelo...
+start "Streamlit UI" cmd /k ".venv\Scripts\python.exe -m streamlit run app_streamlit.py"
+
 echo Waiting for the server to start...
 timeout /t 3 /nobreak > nul
 
