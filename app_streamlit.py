@@ -34,15 +34,35 @@ if uploaded_file:
                     st.stop()
 
                 response.raise_for_status()
-                data = response.json()
 
                 if is_image:
+                    try:
+                        data = response.json()
+                    except ValueError:
+                        label = response.text.strip()
+                        st.warning(label)
+                        st.stop()
+
+                    if isinstance(data, str):
+                        st.warning(data)
+                        st.stop()
+
+                    if not isinstance(data, dict):
+                        st.error("Respuesta inválida del servidor.")
+                        st.stop()
+
                     image_info = data.get("images", [{}])[0]
                     label = image_info.get("label", "Desconocido")
                     score = image_info.get("score", 0.0) * 100
                     st.metric("Predicción", label, f"{score:.1f}%")
                     st.success(f"Resultado: {label} (Confianza: {score:.1f}%)")
                 else:
+                    try:
+                        data = response.json()
+                    except ValueError:
+                        st.warning(response.text.strip())
+                        st.stop()
+
                     predictions = data.get("predictions", [])
                     if not predictions:
                         st.error("No se devolvieron predicciones para el batch.")

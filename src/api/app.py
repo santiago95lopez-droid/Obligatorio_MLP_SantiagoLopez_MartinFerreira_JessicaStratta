@@ -1,14 +1,15 @@
 from contextlib import asynccontextmanager
 import os
 import sys
-from typing import Dict, Any, AsyncGenerator
+
+from typing import AsyncGenerator
 
 sys.path.append(os.getcwd())
 
 import uvicorn
 
 from src.api.routers import init_routers
-from src.core.classification import Classifier
+from src.core.classification import Classifier, MushroomFilter
 from src.core.preprocessing import Preprocessor
 from src.settings import custom_logger, SettingsManager
 from fastapi import FastAPI
@@ -16,6 +17,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 
 logger = custom_logger("API")
+
+settings = SettingsManager()
+classifier = Classifier(
+    model_path=settings.MODEL_PATH,
+    labels_path=settings.LABELS_PATH,
+    batch_size=settings.BATCH_SIZE,
+)
+image_size = getattr(settings, "IMAGE_SIZE", None) or classifier.get_input_image_size()
+preprocessor = Preprocessor(image_size=tuple(image_size))
+mushroom_filter = MushroomFilter()
 
 
 # Context manager, inicializa el preprocesador y el clasificador cuando se levanta la app
@@ -29,18 +40,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     try:
         logger.info("Starting up application...")
-        settings = SettingsManager()
-        classifier = Classifier(
-            model_path=settings.MODEL_PATH,
-            labels_path=settings.LABELS_PATH,
-            batch_size=settings.BATCH_SIZE,
-        )
-        image_size = getattr(settings, "IMAGE_SIZE", None) or classifier.get_input_image_size()
-        preprocessor = Preprocessor(image_size=tuple(image_size))
-
         app.state.settings = settings
         app.state.preprocessor = preprocessor
         app.state.classifier = classifier
+        app.state.mushroom_filter = mushroom_filter
 
         logger.info("Application startup complete")
         yield

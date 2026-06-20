@@ -8,6 +8,8 @@ from src.settings import custom_logger
 from src.structs.payload import ImageResponsePayload
 
 
+
+
 logger = custom_logger("Classification Router")
 
 classification_router = APIRouter()
@@ -16,7 +18,7 @@ classification_router = APIRouter()
 @classification_router.post("/images")
 async def classify_images(
     request: Request, image: UploadFile = File(...)
-) -> ImageResponsePayload:
+) -> ImageResponsePayload | str:
     """
     Endpoint for classifying a single uploaded image
 
@@ -25,11 +27,17 @@ async def classify_images(
         image: UploadFile containing the image file
 
     Returns:
-        ImageResponsePayload object containing the classified image
+        ImageResponsePayload object containing the classified image or a string when the image is noise
     """
 
-    preprocessed_image = await request.app.state.preprocessor.preprocess_image(image)
-    response = request.app.state.classifier.predict(preprocessed_image)
+    image_bytes = await image.read()
+    if not request.app.state.mushroom_filter.is_mushroom(image_bytes):
+        return "No es un hongo!"
+
+    payload = await request.app.state.preprocessor.preprocess_image(
+        image_bytes, filename=image.filename
+    )
+    response = request.app.state.classifier.predict(payload)
     return response
 
 
@@ -61,8 +69,13 @@ async def predict_batch(request: Request, archive: UploadFile = File(...)) -> di
                     with archive_file.open(member) as member_file:
                         file_bytes = member_file.read()
 
-                    batch_image = UploadFile(filename=filename, file=BytesIO(file_bytes))
-                    payload = await request.app.state.preprocessor.preprocess_image(batch_image)
+                    if not request.app.state.mushroom_filter.is_mushroom(file_bytes):
+                        results.append({"filename": filename, "prediction": "No es un hongo!"})
+                        continue
+
+                    payload = await request.app.state.preprocessor.preprocess_image(
+                        file_bytes, filename=filename
+                    )
                     response = request.app.state.classifier.predict(payload)
                     prediction = response.images[0].label
 
