@@ -44,18 +44,26 @@ class DummyMushroomFilter:
 
 
 @pytest.fixture(autouse=True)
-def patch_app_classes(monkeypatch):
-    monkeypatch.setattr("src.api.app.preprocessor", DummyPreprocessor(image_size=(224, 224)))
-    monkeypatch.setattr(
-        "src.api.app.classifier",
-        DummyClassifier(model_path="dummy-model.tflite", labels_path="dummy-labels.json", batch_size=1),
+def patch_app_classes():
+    app.state.preprocessor = DummyPreprocessor(image_size=(224, 224))
+    app.state.classifier = DummyClassifier(
+        model_path="dummy-model.tflite",
+        labels_path="dummy-labels.json",
+        batch_size=1,
     )
-    monkeypatch.setattr("src.api.app.mushroom_filter", DummyMushroomFilter())
+    app.state.mushroom_filter = DummyMushroomFilter()
 
 
 @pytest.fixture
 def client():
     with TestClient(app, raise_server_exceptions=True) as client:
+        app.state.preprocessor = DummyPreprocessor(image_size=(224, 224))
+        app.state.classifier = DummyClassifier(
+            model_path="dummy-model.tflite",
+            labels_path="dummy-labels.json",
+            batch_size=1,
+        )
+        app.state.mushroom_filter = DummyMushroomFilter()
         yield client
 
 

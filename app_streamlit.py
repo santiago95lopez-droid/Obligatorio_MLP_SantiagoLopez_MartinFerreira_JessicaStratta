@@ -1,3 +1,4 @@
+import base64
 import requests
 import streamlit as st
 
@@ -7,6 +8,7 @@ BATCH_URL = f"{API_BASE_URL}/classification/predict-batch"
 
 st.title("Clasificador de Hongos ORT")
 uploaded_file = st.file_uploader("Selecciona una imagen o ZIP", type=["png", "jpg", "jpeg", "zip"])
+show_heatmap = st.checkbox("Show Explanation Heatmap", value=False)
 
 if uploaded_file:
     filename = uploaded_file.name.lower()
@@ -25,7 +27,8 @@ if uploaded_file:
                     response = requests.post(BATCH_URL, files=files, timeout=60)
                 elif is_image:
                     files = {"image": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-                    response = requests.post(IMAGE_URL, files=files, timeout=30)
+                    params = {"generate_heatmap": "true"} if show_heatmap else {}
+                    response = requests.post(IMAGE_URL, files=files, params=params, timeout=30)
                 else:
                     st.error("Formato no soportado. Usa PNG, JPG, JPEG o ZIP.")
                     response = None
@@ -51,11 +54,30 @@ if uploaded_file:
                         st.error("Respuesta inválida del servidor.")
                         st.stop()
 
-                    image_info = data.get("images", [{}])[0]
+                    images_list = data.get("images", [])
+                    if not images_list:
+                        st.error("El servidor no devolvió resultados para la imagen.")
+                        st.stop()
+
+                    image_info = images_list[0]
                     label = image_info.get("label", "Desconocido")
-                    score = image_info.get("score", 0.0) * 100
-                    st.metric("Predicción", label, f"{score:.1f}%")
-                    st.success(f"Resultado: {label} (Confianza: {score:.1f}%)")
+                    score = image_info.get("score", 0.0)
+                    score_percent = float(score) * 100
+                    st.metric("Predicción", label, f"{score_percent:.1f}%")
+                    st.success(f"Resultado: {label} (Confianza: {score_percent:.1f}%)")
+
+                    heatmap_b64 = data.get("heatmap") or data.get("heatmap_base64")
+                    if show_heatmap and heatmap_b64:
+                        heatmap_bytes = base64.b64decode(heatmap_b64)
+                        col_left, col_right = st.columns(2)
+                        with col_left:
+                            st.caption("Imagen original")
+                            st.image(uploaded_file.getvalue(), use_container_width=True)
+                        with col_right:
+                            st.caption("Mapa de atención (Grad-CAM)")
+                            st.image(heatmap_bytes, use_container_width=True)
+                    elif show_heatmap:
+                        st.info("El servidor no devolvió un mapa de atención.")
                 else:
                     try:
                         data = response.json()

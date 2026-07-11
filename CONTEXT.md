@@ -65,16 +65,24 @@ The following items are currently supported by the repository and were verified 
 - The FastAPI app boots successfully and the health endpoint returns a 200 response.
 - The app exposes image classification and batch prediction routes through the router layer.
 - The classifier implementation has been updated to use a TensorFlow Lite interpreter workflow via tf.lite.Interpreter.
-- The preprocessing pipeline resizes images to a fixed size and normalizes them to floating-point values in the $[0,1]$ range.
+- The preprocessing pipeline resizes images to a fixed size and normalizes them to floating-point values in the $[0,1]$ range for the TFLite classifier payload.
+- The MobileNetV2 mushroom filter expects the original uploaded image bytes and applies Keras `preprocess_input` internally, so it should receive the raw image bytes rather than already-normalized arrays.
 - The label mapping is driven by the JSON file under modelohongos/ and is used to translate model outputs into human-readable classes.
 - The stale Keras-style test references were removed, and the classifier-related tests were aligned with the TFLite interface and input/output shapes.
 - The preprocessing path now handles UploadFile, bytes, and BytesIO/file-like payloads deterministically by resetting streams and passing bytes to the downstream preprocessor layer.
+- The single-image route now returns a readable non-mushroom payload when the pre-filter rejects the upload, using the message "No es un hongo" instead of masking the result as an unknown prediction.
+- The Streamlit frontend includes a heatmap toggle, sends `generate_heatmap=true` when requested, and renders the returned base64 heatmap beside the original image.
+- The Grad-CAM explainer was hardened so it prefers common MobileNetV2 feature-map layer names and returns a zero heatmap on gradient errors instead of crashing the request.
+- The Grad-CAM implementation was further refactored to use a unified functional sub-model built from the loaded Keras graph, so the heatmap path uses a single connected forward pass and avoids the disconnected graph error that previously collapsed into a blank heatmap.
 - Both the single-image classification endpoint and the batch prediction endpoint have been fully verified end to end using pytest.
 
 ## 5. What Was Attempted & Failed (Lessons Learned)
 These are the important migration and integration lessons learned during the project:
 - The migration from the original Keras model artifact to a quantized TensorFlow Lite model required updating the classifier tests and fixtures to match the new interpreter-based interface.
 - Stream handling for uploaded files was a recurring source of issues, and the final fix was to reset the upload stream and pass normalized byte payloads into the downstream preprocessing and inference layers.
+- An additional verification pass was attempted for the new optional heatmap/Grad-CAM explanation path. The goal was to run the router integration tests and confirm that the API returns a base64 heatmap when requested.
+- The verification attempt exposed environment-level issues rather than model logic issues: the first terminal command hit a Python shell syntax error, and a subsequent PowerShell invocation failed because the command was being interpreted incorrectly in the active terminal context. This pointed to an invocation/quoting mismatch with the local virtual environment rather than a bug in the router itself.
+- The implementation work for the heatmap feature is in place, but the final runtime confirmation should be retried from a clean terminal session using the configured virtualenv interpreter path.
 
 ## 6. Next Steps
 Priority order for the next development session:

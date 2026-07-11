@@ -2,8 +2,9 @@ import os
 import zipfile
 from io import BytesIO
 
-from fastapi import APIRouter, Request, UploadFile, File, HTTPException
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
+from src.core.classification.explainability import GradCAMExplainer
 from src.settings import custom_logger
 from src.structs.payload import ImageResponsePayload
 
@@ -15,10 +16,19 @@ logger = custom_logger("Classification Router")
 classification_router = APIRouter()
 
 
+def _build_heatmap_payload(response: ImageResponsePayload, heatmap_base64: str | None) -> dict:
+    payload = response.model_dump()
+    if heatmap_base64 is not None:
+        payload["heatmap"] = heatmap_base64
+    return payload
+
+
 @classification_router.post("/images")
 async def classify_images(
-    request: Request, image: UploadFile = File(...)
-) -> ImageResponsePayload | str:
+    request: Request,
+    image: UploadFile = File(...),
+    generate_heatmap: bool = False,
+) -> ImageResponsePayload | dict | str:
     """
     Endpoint for classifying a single uploaded image
 
@@ -32,13 +42,23 @@ async def classify_images(
 
     image_bytes = await image.read()
     if not request.app.state.mushroom_filter.is_mushroom(image_bytes):
-        return "No es un hongo!"
+        return {
+            "label": "No es un hongo",
+            "score": 0.0,
+            "message": "No es un hongo",
+        }
 
     await image.seek(0)
     payload = await request.app.state.preprocessor.preprocess_image(
         BytesIO(image_bytes), filename=image.filename
     )
     response = request.app.state.classifier.predict(payload)
+
+    if generate_heatmap:
+        explainer = GradCAMExplainer(model_path="modelohongos/modelo_hongos_mobilenet.keras")
+        heatmap_base64 = explainer.encode_heatmap(image_bytes)
+        return _build_heatmap_payload(response, heatmap_base64)
+
     return response
 
 

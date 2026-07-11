@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -10,3 +10,4 @@ class ImageResponsePayload(BaseModel):
 
     images: List[ClassifiedImage]
     model_id: str
+    heatmap: Optional[str] = None

@@ -1,4 +1,5 @@
 @echo off
+setlocal EnableExtensions
 REM Start the FastAPI server in a new window and open Swagger UI.
 cd /d "%~dp0"
 
@@ -25,6 +26,19 @@ if errorlevel 1 (
 
 if not exist ".venv\Scripts\python.exe" (
     echo ERROR: no se encontró el ejecutable Python en .venv\Scripts\python.exe
+    exit /b 1
+)
+
+set "KERAS_MODEL_PATH=%~dp0modelohongos\modelo_hongos_mobilenet.keras"
+set "TFLITE_MODEL_PATH=%~dp0modelohongos\modelo_quantizado.tflite"
+
+if not exist "%KERAS_MODEL_PATH%" (
+    echo ERROR: no se encontró el modelo Keras en %KERAS_MODEL_PATH%
+    exit /b 1
+)
+
+if not exist "%TFLITE_MODEL_PATH%" (
+    echo ERROR: no se encontró el modelo TFLite en %TFLITE_MODEL_PATH%
     exit /b 1
 )
 
