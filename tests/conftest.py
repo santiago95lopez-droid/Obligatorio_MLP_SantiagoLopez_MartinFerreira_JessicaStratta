@@ -1,10 +1,5 @@
-
+import numpy as np
 import pytest
-try:
-    import torch
-except Exception:
-    torch = None
-    import numpy as np
 from fastapi.testclient import TestClient
 from src.api.app import app
 from src.structs.images import ClassifiedImage, ScoresMetadata
@@ -15,13 +10,10 @@ class DummyPreprocessor:
     def __init__(self, image_size=None):
         self.image_size = image_size
 
-    async def preprocess_image(self, image):
-        if torch is not None:
-            pixel_values = torch.zeros((1, 224, 224, 3))
-        else:
-            pixel_values = np.zeros((1, 224, 224, 3))
+    async def preprocess_image(self, image, filename=None):
+        pixel_values = np.zeros((1, 224, 224, 3), dtype=np.float32)
         return {
-            "filename": image.filename,
+            "filename": filename or getattr(image, "filename", "test.png"),
             "pixel_values": pixel_values,
         }
 
@@ -46,10 +38,19 @@ class DummyClassifier:
         )
 
 
+class DummyMushroomFilter:
+    def is_mushroom(self, image_bytes):
+        return True
+
+
 @pytest.fixture(autouse=True)
 def patch_app_classes(monkeypatch):
-    monkeypatch.setattr("src.api.app.Preprocessor", DummyPreprocessor)
-    monkeypatch.setattr("src.api.app.Classifier", DummyClassifier)
+    monkeypatch.setattr("src.api.app.preprocessor", DummyPreprocessor(image_size=(224, 224)))
+    monkeypatch.setattr(
+        "src.api.app.classifier",
+        DummyClassifier(model_path="dummy-model.tflite", labels_path="dummy-labels.json", batch_size=1),
+    )
+    monkeypatch.setattr("src.api.app.mushroom_filter", DummyMushroomFilter())
 
 
 @pytest.fixture

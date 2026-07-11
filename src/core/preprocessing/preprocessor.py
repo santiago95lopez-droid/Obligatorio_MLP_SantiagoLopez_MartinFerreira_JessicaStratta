@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 from fastapi import UploadFile
@@ -9,7 +9,7 @@ from src.settings import custom_logger
 
 
 class Preprocessor:
-    """Class for handling image preprocessing for local Keras models."""
+    """Class for handling image preprocessing for local models."""
 
     def __init__(self, image_size: Sequence[int] | None = None) -> None:
         self.logger = custom_logger(self.__class__.__name__)
@@ -17,14 +17,14 @@ class Preprocessor:
 
     async def preprocess_image(
         self,
-        image: UploadFile | bytes | BytesIO,
+        image: UploadFile | bytes | bytearray | BytesIO | Any,
         filename: str | None = None,
     ):
         """
         Method for preprocessing a single uploaded image.
 
         Args:
-            image: UploadFile, bytes, or file-like object containing the image
+            image: UploadFile, bytes, bytearray, BytesIO, or another file-like object
             filename: Optional filename to preserve in the payload
 
         Returns:
@@ -32,16 +32,31 @@ class Preprocessor:
         """
         if isinstance(image, UploadFile):
             self.logger.info(f"Preprocessing image {image.filename}")
+            await image.seek(0)
             image_bytes = await image.read()
             filename = filename or image.filename
         elif isinstance(image, (bytes, bytearray)):
             self.logger.info("Preprocessing image bytes payload")
             image_bytes = bytes(image)
-        else:
+        elif isinstance(image, BytesIO):
             self.logger.info(
                 f"Preprocessing image file-like object {getattr(image, 'name', 'unknown')}"
             )
+            image.seek(0)
             image_bytes = image.read()
+        elif hasattr(image, "read"):
+            self.logger.info(
+                f"Preprocessing image file-like object {getattr(image, 'name', 'unknown')}"
+            )
+            if hasattr(image, "seek"):
+                image.seek(0)
+            image_bytes = image.read()
+            if hasattr(image_bytes, "__await__"):
+                image_bytes = await image_bytes
+        else:
+            raise TypeError(
+                "Unsupported image payload type. Expected UploadFile, bytes, bytearray, or a file-like object."
+            )
 
         pil_image = Image.open(BytesIO(image_bytes)).convert("RGB")
 

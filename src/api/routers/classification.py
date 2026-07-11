@@ -34,8 +34,9 @@ async def classify_images(
     if not request.app.state.mushroom_filter.is_mushroom(image_bytes):
         return "No es un hongo!"
 
+    await image.seek(0)
     payload = await request.app.state.preprocessor.preprocess_image(
-        image_bytes, filename=image.filename
+        BytesIO(image_bytes), filename=image.filename
     )
     response = request.app.state.classifier.predict(payload)
     return response
@@ -74,7 +75,7 @@ async def predict_batch(request: Request, archive: UploadFile = File(...)) -> di
                         continue
 
                     payload = await request.app.state.preprocessor.preprocess_image(
-                        file_bytes, filename=filename
+                        BytesIO(file_bytes), filename=filename
                     )
                     response = request.app.state.classifier.predict(payload)
                     prediction = response.images[0].label

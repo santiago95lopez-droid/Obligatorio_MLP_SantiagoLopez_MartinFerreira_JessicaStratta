@@ -2,23 +2,28 @@ import asyncio
 from io import BytesIO
 
 from PIL import Image
-from starlette.datastructures import UploadFile
 from src.core.preprocessing.preprocessor import Preprocessor
 
 
 def test_preprocessor():
-    """Test preprocessing of an uploaded image with the local Keras preprocessor."""
+    """Test preprocessing of byte and file-like image payloads."""
 
     preprocessor = Preprocessor(image_size=(224, 224))
     image = Image.new("RGB", (10, 10), color="blue")
     buffer = BytesIO()
     image.save(buffer, format="PNG")
-    buffer.seek(0)
+    image_bytes = buffer.getvalue()
 
-    upload_file = UploadFile(filename="test.png", file=buffer)
-    result = asyncio.run(preprocessor.preprocess_image(upload_file))
+    bytes_result = asyncio.run(
+        preprocessor.preprocess_image(image_bytes, filename="test.png")
+    )
+    assert bytes_result["filename"] == "test.png"
+    assert "pixel_values" in bytes_result
+    assert bytes_result["pixel_values"].shape == (1, 224, 224, 3)
 
-    assert result["filename"] == "test.png"
-    assert "pixel_values" in result
-    # Expect channels-last shape for Keras models: (batch, height, width, channels)
-    assert result["pixel_values"].shape == (1, 224, 224, 3)
+    bytesio_result = asyncio.run(
+        preprocessor.preprocess_image(BytesIO(image_bytes), filename="test.png")
+    )
+    assert bytesio_result["filename"] == "test.png"
+    assert "pixel_values" in bytesio_result
+    assert bytesio_result["pixel_values"].shape == (1, 224, 224, 3)

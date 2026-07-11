@@ -1,5 +1,5 @@
 ClassificationModel:
-  MODEL_PATH: modelohongos/modelo_hongos_mobilenet.keras
+  MODEL_PATH: modelohongos/modelo_quantizado.tflite
   LABELS_PATH: modelohongos/clases_hongos.json
   BATCH_SIZE: 32
   IMAGE_SIZE: [224, 224]
