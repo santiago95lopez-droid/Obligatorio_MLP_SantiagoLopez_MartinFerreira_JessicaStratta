@@ -1,261 +1,287 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/hKg-8jSY)
-# Práctico 4: Model Serving
+# Práctico 4: Servido de Modelos - Clasificador de Hongos con TFLite y Grad-CAM
 
-En este práctico se implementará un sistema de clasificación de imágenes utilizando un modelo Keras/TensorFlow y FastAPI para crear una API REST.
+Este proyecto implementa una API REST para clasificación de imágenes de hongos con FastAPI. La inferencia principal se ejecuta localmente con un modelo cuantizado TensorFlow Lite, y el artefacto `.keras` se conserva únicamente para respaldar la generación opcional de mapas de atención Grad-CAM.
 
-## Contenido
+## Resumen
 
-- Usamos un sistema de clasificación de imágenes usando un modelo Keras/TensorFlow
-- Creamos una API REST con FastAPI para servir predicciones
-- Realizamos pruebas de inferencia y calidad del modelo
+- API FastAPI para clasificación individual y por lotes.
+- Inferencia local eficiente en CPU mediante `tf.lite.Interpreter` sobre `modelo_quantizado.tflite`.
+- Filtro previo de hongos basado en MobileNetV2 para cortar temprano imágenes no válidas.
+- Explicabilidad opcional con Grad-CAM usando `tf.GradientTape` y el artefacto legado `.keras`.
+- Interfaz Streamlit para probar imágenes individuales o archivos ZIP.
 
+## Estructura del proyecto
 
-## Estructura del Proyecto
-
+```text
+.
+├── app_streamlit.py
+├── docker-compose.yml
+├── Dockerfile
+├── docs/
+│   ├── endpoints.md
+│   └── examples.json
+├── modelohongos/
+│   ├── clases_hongos.json
+│   ├── modelo_hongos_mobilenet.keras
+│   └── modelo_quantizado.tflite
+├── run_api.bat
+├── src/
+│   ├── api/
+│   │   ├── app.py
+│   │   └── routers/
+│   │       ├── __init__.py
+│   │       ├── classification.py
+│   │       └── health.py
+│   ├── core/
+│   │   ├── classification/
+│   │   │   ├── __init__.py
+│   │   │   ├── classifier.py
+│   │   │   ├── explainability.py
+│   │   │   └── mushroom_filter.py
+│   │   └── preprocessing/
+│   │       ├── __init__.py
+│   │       └── preprocessor.py
+│   ├── settings/
+│   │   ├── __init__.py
+│   │   ├── logger.py
+│   │   ├── settings.yml
+│   │   └── settings_manager.py
+│   ├── structs/
+│   │   ├── images.py
+│   │   └── payload.py
+│   └── utils/
+│       └── file_loading.py
+├── tests/
+│   ├── api/
+│   │   └── test_routers.py
+│   └── core/
+│       ├── test_classification.py
+│       └── test_preprocessor.py
+├── requirements.txt
+└── pyproject.toml
 ```
-practico-4-2026/
-├── src/                     # Código fuente
-│   ├── api/                # Endpoints de la API
-│   │   ├── routers/       # Definición de rutas
-│   │   └── app.py         # Aplicación FastAPI
-│   ├── core/              # Lógica principal
-│   │   ├── classification.py
-│   │   └── preprocessing.py
-│   ├── settings/          # Configuración
-│   └── utils/             # Utilidades
-├── tests/                 # Tests unitarios
-├── Dockerfile            # Configuración de Docker (Extra)
-├── docker-compose.yml    # Configuración de Docker Compose (Extra)
-└── requirements.txt      # Dependencias del proyecto
-```
 
-## 1. FastAPI y TensorFlow/Keras
+## Tecnologías principales
 
 ### FastAPI
 
-FastAPI es un framework moderno y de alto rendimiento para construir APIs con Python. Sus principales ventajas son:
+FastAPI expone los endpoints, valida requests multipart y permite documentar automáticamente la API en Swagger/OpenAPI.
 
-- **Rendimiento**: Uno de los frameworks más rápidos disponibles, comparable a NodeJS y Go
-- **Documentación Automática**: Genera automáticamente documentación interactiva (Swagger/OpenAPI)
-- **Validación de Tipos**: Integración nativa con el sistema de tipos de Python
-- **Async/Await**: Soporte nativo para operaciones asíncronas
-- **Fácil de Usar**: Sintaxis intuitiva y minimalista
-- **Basado en Estándares**: Compatible con OpenAPI y JSON Schema
+### TensorFlow Lite como motor principal
 
-### TensorFlow / Keras
+La ejecución de inferencia productiva se realiza con `tf.lite.Interpreter` cargando `modelohongos/modelo_quantizado.tflite`. Esta es la ruta principal del sistema porque prioriza:
 
-El proyecto usa TensorFlow/Keras para cargar y servir un modelo local (.keras). Ventajas:
+- menor costo de inferencia en CPU,
+- artefactos cuantizados más livianos,
+- despliegue local simple sin depender de un servidor externo de modelos.
 
-- **Modelo Ligero**: Fácil de exportar y desplegar
-- **Compatibilidad**: Integración nativa con `tensorflow` y `keras`
-- **GPU/CPU**: Soporte para aceleración cuando está disponible
+### Keras solo para explicabilidad
 
-## 2. Configuración del Entorno
+El archivo `modelohongos/modelo_hongos_mobilenet.keras` no es el motor principal de predicción. Se mantiene estrictamente para el módulo opcional de explicabilidad, donde `tf.GradientTape` calcula Grad-CAM sobre el backbone MobileNetV2 y devuelve un heatmap codificado en base64.
 
-### Configuración del Entorno de Desarrollo
+## Pipeline de imágenes
 
-1. Crear entorno virtual:
+La API sigue un pipeline robusto de tres etapas:
 
-   ```bash
-   # macOS/Linux
-   virtualenv venv
-   source venv/bin/activate
+### 1. Mushroom pre-filter
 
-   # Windows
-   virtualenv venv
-   .\venv\Scripts\activate
-   ```
-2. Instalar dependencias:
-
-   ```bash
-   # Instalar dependencias principales
-   pip install -r requirements.txt
-
-   # Instalar dependencias de desarrollo
-   pip install -r dev-requirements.txt
-   ```
-
-Para levantar el servidor de forma local, usar el comando de Poetry:
-
-
-```bash
-poetry run python src/api/app.py
-
-```
-Si no usa Poetry, el comando es:
-
-```bash
-python src/api/app.py
-
-```
-También se puede crear un contenedor de Docker para ejecutar el práctico, más información al final de este documento.
-
-## 3. Clasificación de Imágenes
-
-La clasificación de imágenes consiste en asignar una etiqueta a una imagen cargada en la API. En este proyecto, utilizamos modelos de Hugging Face para procesar la imagen y devolver la probabilidad de cada clase.
-
-### Procesamiento de Imágenes
-
-El pipeline de procesamiento incluye:
-
-1. **Carga de Imagen**: Leer el archivo cargado por el usuario
-2. **Conversión a RGB**: Normalizar los canales de color
-3. **Preprocesamiento**: Redimensionar y convertir a tensores compatibles con el modelo
-4. **Clasificación**: Ejecutar inferencia y generar scores
-
-### Batch Processing
-
-Para optimizar el rendimiento, se puede procesar múltiples imágenes en lotes:
-
-- Procesar varias imágenes en una sola pasada
-- Reducir overhead de inferencia
-- Mejorar throughput del sistema
-
-
-## 4. Ejemplo de Resultados
-
-El sistema es capaz de clasificar imágenes y devolver etiquetas y scores. Por ejemplo, al enviar una imagen con el siguiente comando:
-
-```bash
-curl -X POST http://localhost:8080/classification/images \
-  -F "image=@test.png"
-```
-
-El sistema responde con la clasificación detallada:
+Antes de preprocesar o clasificar, `src/core/classification/mushroom_filter.py` analiza los bytes crudos de la imagen con MobileNetV2. Si la imagen no parece contener un hongo, la API corta el flujo de forma temprana y responde `200 OK` con:
 
 ```json
 {
-  "images": [
-    {
-      "filename": "test.png",
-      "label": "dog",
-      "score": 0.92,
-      "metadata": {
-        "scores": {
-          "cat": 0.08,
-          "dog": 0.92
-        }
-      }
-    }
-  ],
-   "model_id": "modelohongos/modelo_hongos_mobilenet.keras"
+   "label": "No es un hongo",
+   "score": 0.0,
+   "message": "No es un hongo"
 }
 ```
 
-La respuesta incluye:
+### 2. Preprocessing
 
-- El nombre del archivo cargado
-- La etiqueta predicha (`label`)
-- El score de confianza para la predicción
-- Metadatos con los scores para todas las clases
-- El ID del modelo utilizado
+Si la imagen supera el filtro, `src/core/preprocessing/preprocessor.py`:
 
+- convierte la imagen a RGB,
+- la redimensiona a `(224, 224)`,
+- normaliza los píxeles al rango `[0, 1]`,
+- agrega dimensión de batch para el intérprete TFLite.
 
-## 5. Testing
+### 3. Quantized inference y explainability
 
-El proyecto incluye tests de integración para asegurar la calidad del código:
+`src/core/classification/classifier.py` ejecuta inferencia local con TFLite y genera:
 
-### Ejecutar Tests
+- la clase top-1,
+- su score,
+- el diccionario completo de probabilidades por etiqueta,
+- el `model_id` asociado al artefacto TFLite usado.
+
+Si el cliente envía `generate_heatmap=true`, el router además instancia `src/core/classification/explainability.py`, construye un submodelo funcional sobre el `.keras`, extrae gradientes con `tf.GradientTape` y devuelve un mapa de atención Grad-CAM codificado en base64 dentro de la respuesta.
+
+## Endpoints
+
+### `GET /health`
+
+Chequeo simple de salud de la API.
+
+### `POST /classification/images`
+
+Clasifica una imagen individual recibida como `multipart/form-data` en el campo `image`.
+
+Parámetros:
+
+- `image`: archivo `.png`, `.jpg` o `.jpeg`.
+- `generate_heatmap`: boolean opcional. Si vale `true`, agrega el mapa Grad-CAM a la respuesta.
+
+Ejemplo:
 
 ```bash
-# Ejecutar todos los tests
-pytest
-
+curl -X POST "http://localhost:8080/classification/images?generate_heatmap=true" \
+   -F "image=@test.png"
 ```
 
-### Tipos de Tests
+### `POST /classification/predict-batch`
 
-- **API**: Endpoints, respuestas y manejo de errores
-- **Clasificación**: Precisión del modelo y casos límite
-- **Preprocesamiento**: Limpieza y normalización de texto
+Procesa un archivo `.zip` con múltiples imágenes válidas y devuelve una predicción por archivo.
 
-### Mejores Prácticas
+Ejemplo:
 
-- Usar fixtures de pytest para configuración
-- Mockear dependencias externas
-- Probar casos límite y errores
+```bash
+curl -X POST http://localhost:8080/classification/predict-batch \
+   -F "archive=@imagenes.zip"
+```
 
-## 6. Ejercicio Práctico
+## Ejemplo de respuesta JSON
 
-### Clasificación de Imágenes
+Respuesta realista para una clasificación individual con `generate_heatmap=true`:
 
-Implementa un systema de clasificación de imágenes, usando TensorFlow/Keras. Recomendaciones:
+```json
+{
+   "images": [
+      {
+         "filename": "amanita.png",
+         "label": "amanita_muscaria",
+         "score": 0.9473,
+         "metadata": {
+            "scores": {
+               "amanita_muscaria": 0.9473,
+               "boletus_edulis": 0.0312,
+               "cantharellus_cibarius": 0.0215
+            }
+         }
+      }
+   ],
+   "model_id": "modelohongos/modelo_quantizado.tflite",
+   "heatmap": "iVBORw0KGgoAAAANSUhEUgAA..."
+}
+```
 
-- Buscar modelos que no tengan un peso muy grande (<800M de parámetros).
-- Verificar el tiempo de inferencia.
-- Priorizar modelos que funcionen bien en CPU.
+Respuesta realista para una imagen descartada por el pre-filtro:
 
-#### Tareas:
+```json
+{
+   "label": "No es un hongo",
+   "score": 0.0,
+   "message": "No es un hongo"
+}
+```
 
-1. Crear nuevo endpoint para la clasificación de imágenes.
-2. Probar con diferentes inputs de imágenes.
+Respuesta realista para batch:
 
-#### Entregables:
+```json
+{
+   "predictions": [
+      {
+         "filename": "muestra_1.png",
+         "prediction": "amanita_muscaria"
+      },
+      {
+         "filename": "muestra_2.png",
+         "prediction": "No es un hongo!"
+      }
+   ]
+}
+```
 
-1. Código adaptado
-2. README con:
-   - Modelo usado y su tamaño
-   - Resultados de ejemplos de clasificación de imágenes.
-   - Tiempos de inferencia
-  
-Opcionalmente puede agregar preprocesamiento a las imágenes de las requests antes de hacer la clasificación.
+## Testing
 
-## 7. Recursos Adicionales
+La solución queda cubierta por suites `pytest` que validan el comportamiento esperado de extremo a extremo y por componente:
 
+- clasificación de imagen individual,
+- predicción batch vía ZIP,
+- short-circuit del filtro de hongos,
+- preprocesamiento y forma del tensor normalizado,
+- contrato de respuesta del router.
 
+Ejecución de tests:
 
+```bash
+pytest
+```
 
-### Configuración de Docker
+## Ejecución local
 
-Hay dos formas de ejecutar la aplicación con Docker:
+### Opción 1: entorno virtual con `pip`
 
-##### Opción 1: Docker Directo
+```bash
+python -m venv .venv
 
-1. Construir la imagen:
+# Windows
+.venv\Scripts\activate
 
-   ```bash
-   docker build -t text-classification-api .
-   ```
-2. Ejecutar el contenedor:
+pip install -r requirements.txt
+python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8080 --reload
+```
 
-   ```bash
-   # Ejecutar en modo detached
-   docker run -d -p 8080:8080 text-classification-api
+La documentación interactiva queda disponible en `http://127.0.0.1:8080/docs`.
 
-   # Ver logs
-   docker logs -f <container_id>
-   ```
+### Opción 2: usando Poetry
 
-##### Opción 2: Docker Compose
+```bash
+poetry install
+poetry run python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8080 --reload
+```
 
-Docker Compose es una herramienta para definir y ejecutar aplicaciones multi-contenedor. Sus principales ventajas son:
+### Opción 3: helper `run_api.bat`
 
-- **Definición de Servicios**: Permite definir todos los servicios necesarios en un archivo YAML
-- **Entorno Aislado**: Cada servicio corre en su propio contenedor
-- **Desarrollo Consistente**: Garantiza que todos los desarrolladores usen la misma configuración
-- **Fácil Despliegue**: Un solo comando para levantar toda la aplicación
-- **Gestión de Dependencias**: Maneja automáticamente las dependencias entre servicios
-- **Variables de Entorno**: Centraliza la configuración de variables de entorno
-- **Volúmenes**: Facilita el manejo de datos persistentes y desarrollo en tiempo real
+El script `run_api.bat` automatiza el flujo en Windows:
 
-1. Ejecutar con Docker Compose (construye la imagen automáticamente):
+- verifica Poetry,
+- crea el entorno local dentro del proyecto,
+- instala dependencias,
+- valida la existencia de `modelo_hongos_mobilenet.keras` y `modelo_quantizado.tflite`,
+- levanta la API en `:8080`,
+- abre además la interfaz Streamlit.
 
-   ```bash
-   # Ejecutar en modo detached
-   docker-compose up -d
+Ejecutar:
 
-   # Ver logs
-   docker-compose logs -f
-   ```
-2. Para detener los contenedores:
+```bat
+run_api.bat
+```
 
-   ```bash
-   # Si usaste Docker directo
-   docker stop <container_id>
+## Docker
 
-   # Si usaste Docker Compose
-   docker-compose down
-   ```
+### Docker directo
+
+```bash
+docker build -t mushroom-classifier-api .
+docker run -p 8080:8080 mushroom-classifier-api
+```
+
+### Docker Compose
+
+```bash
+docker-compose up --build
+```
+
+Para detener los servicios:
+
+```bash
+docker-compose down
+```
+
+## Notas finales
+
+- La configuración por defecto apunta a `modelohongos/modelo_quantizado.tflite` y `modelohongos/clases_hongos.json` desde `src/settings/settings.yml`.
+- El tamaño de entrada esperado por el pipeline es `(224, 224)`.
+- La app FastAPI y la UI Streamlit permiten probar tanto clasificación simple como batch desde el mismo repositorio.
 
 
 

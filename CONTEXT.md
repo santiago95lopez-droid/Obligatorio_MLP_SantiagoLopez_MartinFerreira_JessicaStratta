@@ -1,94 +1,149 @@
 # Project Context and Session State
 
 ## 1. Current Status
-As of 2026-07-11, the FastAPI stack for the mushroom classifier is fully integrated with a TensorFlow Lite quantized model and verified end to end through pytest for both single-image classification and batch prediction flows.
+As of 2026-07-11, this repository is a finalized model-serving project for mushroom image classification built with FastAPI, TensorFlow Lite, and an optional Grad-CAM explainability path. The production inference route is based on a quantized `.tflite` artifact, while the legacy `.keras` artifact is retained only for explanation generation.
 
-## 2. Purpose & Context
-This repository implements a mushroom classification service for uploaded images. The system is designed to:
-- accept one or more uploaded images through FastAPI endpoints,
-- reject obvious non-mushroom content with a MobileNetV2-based mushroom filter,
-- preprocess images to a fixed RGB shape suitable for inference,
-- run inference with a local classifier and return a predicted label plus confidence scores.
+## 2. Purpose and Scope
+This project serves mushroom image predictions through HTTP endpoints and a lightweight Streamlit UI. The system is designed to:
+- accept single uploaded images through FastAPI,
+- accept ZIP archives for batch prediction,
+- reject non-mushroom images early using a MobileNetV2-based pre-filter,
+- preprocess valid images to the expected tensor format,
+- run local quantized inference on CPU via TensorFlow Lite,
+- optionally return a Grad-CAM attention heatmap for single-image requests.
 
-The technical approach is a small production-style ML serving stack:
-- FastAPI for the HTTP API.
-- Pydantic-style response models for structured predictions.
-- A preprocessing layer that resizes and normalizes images.
-- A classifier wrapper that loads and runs a local model artifact.
-- A settings manager and logging layer for deployment and debugging.
+This is an inference-serving repository, not a training repository. There is no dedicated training pipeline, dataset directory, or notebook-based experiment flow in the current snapshot.
 
-Scope note: this repository is primarily an inference-serving project and an assignment-style ML deployment example; it is not a full training pipeline with a dedicated training notebook or dataset folder in the current snapshot.
+## 3. Core Architecture
 
-## 3. Project Structure
-Key locations in this repository:
+### Main inference path
+- `src/core/classification/classifier.py` is the main classifier wrapper.
+- It loads `modelohongos/modelo_quantizado.tflite` through `tf.lite.Interpreter`.
+- It loads label names from `modelohongos/clases_hongos.json`.
+- It returns a structured payload with top-1 label, confidence score, per-class scores, and `model_id`.
+
+### Optional explainability path
+- `src/core/classification/explainability.py` contains `GradCAMExplainer`.
+- It loads `modelohongos/modelo_hongos_mobilenet.keras` only when a heatmap is requested.
+- It uses `tf.GradientTape` and a functional sub-model to compute Grad-CAM.
+- It returns a base64-encoded PNG heatmap in the response field `heatmap`.
+
+### Pre-filter path
+- `src/core/classification/mushroom_filter.py` runs before preprocessing and inference.
+- It receives raw image bytes.
+- It uses MobileNetV2 ImageNet predictions and mushroom-related keywords to decide whether the image likely contains a mushroom.
+- If the filter rejects the image, the single-image endpoint returns HTTP 200 with the explicit payload:
+
+```json
+{
+  "label": "No es un hongo",
+  "score": 0.0,
+  "message": "No es un hongo"
+}
+```
+
+### Preprocessing path
+- `src/core/preprocessing/preprocessor.py` converts images to RGB.
+- It resizes them to `(224, 224)`.
+- It normalizes pixel values to the `[0, 1]` range.
+- It adds the batch dimension expected by the TFLite interpreter.
+
+## 4. Project Structure Snapshot
+
+Important locations:
 
 - root/
-  - README.md: high-level project description and usage instructions.
-  - IMPLEMENTATION_DETAILS.md: notes on the TensorFlow Lite migration approach.
-  - MIGRATION_TFLITE_SUMMARY.md: migration summary and rollback notes.
-  - CONTEXT.md: this file, the technical memory and session state snapshot.
-  - requirements.txt, pyproject.toml, dev-requirements.txt: Python dependencies.
-  - Dockerfile, docker-compose.yml, run_api.bat: deployment helpers.
+  - `README.md`: updated project overview and execution instructions.
+  - `CONTEXT.md`: authoritative implementation snapshot for future sessions.
+  - `IMPLEMENTATION_DETAILS.md`: migration and implementation notes.
+  - `MIGRATION_TFLITE_SUMMARY.md`: TFLite migration notes.
+  - `Dockerfile`, `docker-compose.yml`, `run_api.bat`: runtime helpers.
+  - `requirements.txt`, `dev-requirements.txt`, `pyproject.toml`: dependency configuration.
+  - `app_streamlit.py`: lightweight UI for single-image and ZIP testing.
 
-- src/
-  - api/app.py: FastAPI application startup and lifespan configuration.
-  - api/routers/classification.py: image classification and batch prediction routes.
-  - api/routers/health.py: health endpoint.
-  - core/classification/classifier.py: classifier wrapper for model loading and inference.
-  - core/classification/mushroom_filter.py: image-based prefilter using MobileNetV2.
-  - core/preprocessing/preprocessor.py: image resizing and normalization.
-  - settings/settings_manager.py: configuration loading from YAML.
-  - settings/settings.yml: runtime model path, class labels, and inference settings.
-  - structs/: request/response payload definitions.
-  - utils/file_loading.py: JSON/YAML loading helpers.
+- `modelohongos/`
+  - `clases_hongos.json`: label mapping.
+  - `modelo_hongos_mobilenet.keras`: legacy Keras artifact used only for Grad-CAM.
+  - `modelo_quantizado.tflite`: production inference model.
 
-- modelohongos/
-  - clases_hongos.json: class label mapping.
-  - modelo_hongos_mobilenet.keras: legacy Keras model artifact.
-  - modelo_quantizado.tflite: current TensorFlow Lite model artifact.
+- `src/api/`
+  - `app.py`: FastAPI app startup, lifespan wiring, router registration.
+  - `routers/classification.py`: single-image and batch classification routes.
+  - `routers/health.py`: health route.
 
-- models/
-  - local cache and model-related assets used by the filtering and serving stack.
+- `src/core/classification/`
+  - `classifier.py`: TFLite inference wrapper.
+  - `explainability.py`: Grad-CAM generation.
+  - `mushroom_filter.py`: MobileNetV2 pre-filter.
 
-- tests/
-  - api/test_routers.py: router and endpoint integration checks.
-  - core/test_classification.py: classifier behavior tests.
-  - core/test_preprocessor.py: preprocessing behavior tests.
+- `src/core/preprocessing/`
+  - `preprocessor.py`: resizing, normalization, tensor preparation.
 
-- docs/
-  - endpoint documentation and example payloads.
+- `src/settings/`
+  - `settings.yml`: runtime defaults.
+  - `settings_manager.py`: YAML-backed settings loader.
 
-Note: no explicit training script, notebook, or dataset directory is currently present in this repository snapshot.
+- `src/structs/`
+  - `images.py`, `payload.py`: response models.
 
-## 4. What's Working (Facts)
-The following items are currently supported by the repository and were verified or directly observed from the current implementation:
-- The FastAPI app boots successfully and the health endpoint returns a 200 response.
-- The app exposes image classification and batch prediction routes through the router layer.
-- The classifier implementation has been updated to use a TensorFlow Lite interpreter workflow via tf.lite.Interpreter.
-- The preprocessing pipeline resizes images to a fixed size and normalizes them to floating-point values in the $[0,1]$ range for the TFLite classifier payload.
-- The MobileNetV2 mushroom filter expects the original uploaded image bytes and applies Keras `preprocess_input` internally, so it should receive the raw image bytes rather than already-normalized arrays.
-- The label mapping is driven by the JSON file under modelohongos/ and is used to translate model outputs into human-readable classes.
-- The stale Keras-style test references were removed, and the classifier-related tests were aligned with the TFLite interface and input/output shapes.
-- The preprocessing path now handles UploadFile, bytes, and BytesIO/file-like payloads deterministically by resetting streams and passing bytes to the downstream preprocessor layer.
-- The single-image route now returns a readable non-mushroom payload when the pre-filter rejects the upload, using the message "No es un hongo" instead of masking the result as an unknown prediction.
-- The Streamlit frontend includes a heatmap toggle, sends `generate_heatmap=true` when requested, and renders the returned base64 heatmap beside the original image.
-- The Grad-CAM explainer was hardened so it prefers common MobileNetV2 feature-map layer names and returns a zero heatmap on gradient errors instead of crashing the request.
-- The Grad-CAM implementation was further refactored to use a unified functional sub-model built from the loaded Keras graph, so the heatmap path uses a single connected forward pass and avoids the disconnected graph error that previously collapsed into a blank heatmap.
-- Both the single-image classification endpoint and the batch prediction endpoint have been fully verified end to end using pytest.
+- `tests/`
+  - `api/test_routers.py`: endpoint contracts and router integration.
+  - `core/test_classification.py`: classifier behavior under mocked TFLite interpreter.
+  - `core/test_preprocessor.py`: preprocessing tensor-shape and input-type coverage.
 
-## 5. What Was Attempted & Failed (Lessons Learned)
-These are the important migration and integration lessons learned during the project:
-- The migration from the original Keras model artifact to a quantized TensorFlow Lite model required updating the classifier tests and fixtures to match the new interpreter-based interface.
-- Stream handling for uploaded files was a recurring source of issues, and the final fix was to reset the upload stream and pass normalized byte payloads into the downstream preprocessing and inference layers.
-- An additional verification pass was attempted for the new optional heatmap/Grad-CAM explanation path. The goal was to run the router integration tests and confirm that the API returns a base64 heatmap when requested.
-- The verification attempt exposed environment-level issues rather than model logic issues: the first terminal command hit a Python shell syntax error, and a subsequent PowerShell invocation failed because the command was being interpreted incorrectly in the active terminal context. This pointed to an invocation/quoting mismatch with the local virtual environment rather than a bug in the router itself.
-- The implementation work for the heatmap feature is in place, but the final runtime confirmation should be retried from a clean terminal session using the configured virtualenv interpreter path.
+## 5. Runtime Contracts
 
-## 6. Next Steps
-Priority order for the next development session:
-1. Benchmark the quantized TensorFlow Lite model for inference latency and memory usage on the target environment.
-2. Prepare deployment artifacts or environment-specific run instructions based on the verified FastAPI setup.
-3. Optionally expand documentation with the verified endpoint behavior and performance observations.
+### `GET /health`
+- Returns a simple healthy response.
 
-## 7. Instructions for Future AIs
-Treat this file as the authoritative state snapshot for the project. Before making changes, read this file first, understand the current status, and preserve the intent of the existing architecture. When a change affects the model pipeline, API contract, or tests, update this file immediately so the next session does not lose context. Prefer verification with pytest or a local run over assumption, and treat old references to the Keras-only loading path as migration leftovers until they are explicitly revalidated.
+### `POST /classification/images`
+- Accepts one image in multipart form under `image`.
+- Accepts optional `generate_heatmap=true`.
+- If the pre-filter rejects the image, returns the non-mushroom payload shown above.
+- Otherwise returns an `ImageResponsePayload` with:
+  - `images`
+  - `model_id`
+  - optional `heatmap`
+
+### `POST /classification/predict-batch`
+- Accepts a `.zip` archive under `archive`.
+- Iterates valid `.jpg`, `.jpeg`, and `.png` members.
+- Returns a `predictions` list with per-file outcomes.
+- Non-mushroom files are returned as `"No es un hongo!"` in the batch path.
+
+## 6. Verified Facts
+The following points are directly supported by the current code and tests:
+- The production model path in `src/settings/settings.yml` points to `modelohongos/modelo_quantizado.tflite`.
+- The labels path points to `modelohongos/clases_hongos.json`.
+- The expected image size is `(224, 224)`.
+- The preprocessor supports `UploadFile`, raw `bytes`, `bytearray`, `BytesIO`, and file-like objects.
+- The classifier converts payloads to `float32`, ensures a batch dimension, runs TFLite inference, and softmaxes outputs if needed.
+- The single-image route can append a base64 heatmap when `generate_heatmap` is requested.
+- The Streamlit app can call both the single-image and batch endpoints and render the heatmap next to the uploaded image.
+- Router tests cover health, single-image classification, non-mushroom rejection, heatmap behavior, batch success, and invalid ZIP handling.
+- Core tests cover classifier prediction behavior and preprocessing output shape.
+
+## 7. Lessons Learned
+- The repository has already completed a migration from direct Keras-serving assumptions to a TFLite-first inference architecture.
+- The most important implementation detail is that the mushroom filter must operate on raw image bytes before preprocessing.
+- Stream reset behavior matters when combining file upload reads with downstream preprocessing and explainability.
+- The `.keras` artifact should be treated as an auxiliary explainability dependency, not as the primary serving model.
+
+## 8. Execution Notes
+Supported execution paths currently documented in the repository:
+- local virtualenv plus `uvicorn`,
+- Poetry-based local execution,
+- `run_api.bat` for Windows automation,
+- Docker via `Dockerfile`,
+- Docker Compose via `docker-compose.yml`.
+
+`run_api.bat` additionally installs dependencies through Poetry, validates both model artifacts, launches the FastAPI app, launches Streamlit, and opens Swagger UI.
+
+## 9. Recommended Next Steps
+If future work continues from this state, the highest-value follow-ups are:
+1. Measure inference latency and memory usage of the quantized TFLite path on the target CPU.
+2. Align secondary docs such as `docs/endpoints.md` with the final router contract if they still reference older payloads.
+3. Add dedicated runtime verification for the full Grad-CAM path against the real `.keras` artifact if environment setup allows it.
+
+## 10. Instructions for Future AIs
+Read this file before making architectural or API-contract changes. Treat it as the current authoritative state of the repository. If a future change affects model artifacts, request/response payloads, endpoint behavior, preprocessing, explainability, or test coverage, update this file in the same session so the next agent inherits the correct project state.
