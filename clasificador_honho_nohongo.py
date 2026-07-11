@@ -33,31 +33,28 @@ def is_mushroom(img_path):
         print(f"Error procesando {img_path}: {e}")
         return False
 
-# Carpetas raíz creadas por el scraper
-sections = ["poisonous-mushrooms", "edible-mushrooms", "inedible-mushrooms"]
+BASE_DIR = r"C:\Users\marti\Desktop\Master\H3\Machine Learning en Produccion\scrapper_fungiatlas\hongos_scrapp"
+RUEDO_DIR = os.path.join(BASE_DIR, "ruido")
 
-for section in sections:
-    if not os.path.exists(section): continue
-    
-    print(f"\n--- Clasificando carpeta: {section} ---")
-    
-    # Crear subcarpetas
-    ok_dir = os.path.join(section, "ok")
-    ruido_dir = os.path.join(section, "ruido")
-    os.makedirs(ok_dir, exist_ok=True)
-    os.makedirs(ruido_dir, exist_ok=True)
-    
-    # Procesar archivos
-    for filename in os.listdir(section):
-        file_path = os.path.join(section, filename)
-        
-        # Solo procesar archivos (ignoramos carpetas)
-        if os.path.isfile(file_path):
-            if is_mushroom(file_path):
-                shutil.move(file_path, os.path.join(ok_dir, filename))
-                print(f"[OK] {filename}")
-            else:
-                shutil.move(file_path, os.path.join(ruido_dir, filename))
-                print(f"[RUIDO] {filename}")
+if not os.path.exists(BASE_DIR):
+    print(f"No se encontró la carpeta de imágenes: {BASE_DIR}")
+else:
+    os.makedirs(RUEDO_DIR, exist_ok=True)
+    print(f"\n--- Clasificando imágenes en: {BASE_DIR} ---")
+
+    for filename in os.listdir(BASE_DIR):
+        file_path = os.path.join(BASE_DIR, filename)
+
+        if not os.path.isfile(file_path):
+            continue
+        if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
+            continue
+
+        if is_mushroom(file_path):
+            print(f"[OK] {filename}")
+        else:
+            target_path = os.path.join(RUEDO_DIR, filename)
+            shutil.move(file_path, target_path)
+            print(f"[RUIDO] {filename}")
 
 print("\nPronto!")
