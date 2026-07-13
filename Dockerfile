@@ -26,7 +26,7 @@ RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
     && python -m pip wheel --wheel-dir=/app/wheels -r requirements.txt
 
 
-# --- Etapa 2: Runtime (Runtime) ---
+# --- Etapa 2: Runtime (Runtime definitivo) ---
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -34,18 +34,32 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Copiamos los wheels pre-compilados y el requirements del builder
+# Instalamos supervisor y las dependencias de imagen actualizadas para Debian Trixie
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        supervisor \
+        libgl1 \
+        libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiamos e instalamos los wheels del builder (mantiene la imagen ultra compacta)
 COPY --from=builder /app/wheels /app/wheels
 COPY --from=builder /app/requirements.txt /app/requirements.txt
 
-# Instalamos las dependencias desde los wheels (sin compilar)
 RUN pip install --no-cache-dir --no-index --find-links=/app/wheels -r requirements.txt \
     && rm -rf /app/wheels
 
-# Copiamos SOLO los archivos necesarios para ejecutar la app
+# Copiamos los archivos esenciales de la aplicación, el modelo y Streamlit[cite: 1]
 COPY src /app/src
 COPY modelohongos /app/modelohongos
+COPY app_streamlit.py /app/app_streamlit.py
 
+# Copiamos la configuración de Supervisor para controlar los dos procesos
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Exponemos el puerto 80 para Elastic Beanstalk y el 8080 para la API interna[cite: 2]
+EXPOSE 80
 EXPOSE 8080
 
-CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8080"]
+# Comando por defecto para arrancar ambos servicios en paralelo
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

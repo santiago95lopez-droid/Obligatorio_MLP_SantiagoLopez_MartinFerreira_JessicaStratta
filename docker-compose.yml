@@ -1,11 +1,17 @@
+version: '3.8'
+
 services:
-  fastapi:
+  app:
     build: 
       context: .
       dockerfile: Dockerfile
     ports:
+      # Mapea el puerto 80 del contenedor (Streamlit) al 8501 de tu PC local
+      - "8501:80"
+      # Mapea el puerto 8080 del contenedor (FastAPI) al 8080 de tu PC local 
       - "8080:8080"
     volumes:
       - ./src:/app/src
+      - ./app_streamlit.py:/app/app_streamlit.py
     environment:
       - PYTHONUNBUFFERED=1
