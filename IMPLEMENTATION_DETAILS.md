@@ -145,7 +145,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 ---
 
-## API Contract (Unchanged)
+## API Contract (Current)
 
 The following aspects remain identical to the frontend:
 
@@ -153,6 +153,7 @@ The following aspects remain identical to the frontend:
 class ImageResponsePayload(BaseModel):
     images: list[ClassifiedImage]
     model_id: str
+    heatmap: str | None = None
 
 class ClassifiedImage(BaseModel):
     filename: str
@@ -160,9 +161,18 @@ class ClassifiedImage(BaseModel):
     score: float            # 0.0 to 1.0
     metadata: ScoresMetadata
         scores: dict        # {"Comestible": 0.8, ...}
+
+# Batch endpoint item shape
+{
+    "filename": "sample.png",
+    "prediction": "Comestible" | "No es un hongo!" | "Error",
+    "score": 0.0-1.0,
+    "error": "..."  # optional, only for per-file failures
+}
 ```
 
-No changes to endpoints, request/response format, or business logic.
+Single-image endpoint contract remains stable. Batch responses now include
+`score` in all cases and keep a consistent structure for per-file errors.
 
 ---
 

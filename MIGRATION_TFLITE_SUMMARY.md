@@ -45,7 +45,7 @@ Successfully migrated from Keras model (`modelo_hongos_mobilenet.keras`) to quan
 The following files require **no changes** as they use the `Classifier` class interface transparently:
 
 1. **src/api/app.py** - Uses `Classifier.predict()` interface (unchanged)
-2. **src/api/routers/classification.py** - Uses `classifier.predict()` (unchanged)
+2. **src/api/routers/classification.py** - Uses `classifier.predict()`; current batch responses include `prediction` and `score` per item
 3. **app_streamlit.py** - Only calls API endpoints (unchanged)
 4. **run_api.bat** - Poetry still manages environment (unchanged)
 5. **tests/** - API contract remains the same

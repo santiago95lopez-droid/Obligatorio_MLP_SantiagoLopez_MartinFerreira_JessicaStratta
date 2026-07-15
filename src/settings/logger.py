@@ -1,17 +1,18 @@
+"""Project-level logging factory utilities."""
+
 from logging import Logger, Formatter, StreamHandler
 from logging import getLogger
 from logging import DEBUG
 
 
 def custom_logger(logger_name: str) -> Logger:
-    """
-    Function for returning a Logger object with specified settings
+    """Creates or reuses a configured logger for application modules.
 
     Args:
-        logger_name: Name of the logger
+        logger_name: Name of the logger.
 
     Returns:
-        Logger object
+        Logger: Configured logger instance.
     """
 
     logger = getLogger(f"{logger_name} - ")

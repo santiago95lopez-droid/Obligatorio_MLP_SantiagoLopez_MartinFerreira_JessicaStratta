@@ -1,7 +1,13 @@
+"""Grad-CAM explainability utilities for mushroom image predictions.
+
+This module loads the legacy Keras artifact and computes heatmaps using
+gradient-based localization over convolutional feature maps.
+"""
+
 import base64
 import os
 from io import BytesIO
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import tensorflow as tf
@@ -12,9 +18,19 @@ from src.settings import custom_logger
 
 
 class GradCAMExplainer:
-    """Generate Grad-CAM heatmaps for a MobileNetV2-based image classifier."""
+    """Generates Grad-CAM heatmaps for model explainability.
+
+    The class is instantiated on demand by the API layer when clients request
+    an explanation map for a single image prediction.
+    """
 
     def __init__(self, model_path: Optional[str] = None, image_size: tuple[int, int] = (224, 224)) -> None:
+        """Initializes Grad-CAM resources and locates the target conv layer.
+
+        Args:
+            model_path: Optional path to the Keras model used for explainability.
+            image_size: Spatial size used for preprocessing input images.
+        """
         self.logger = custom_logger(self.__class__.__name__)
         self.image_size = image_size
         self.model_path = model_path or os.getenv(
@@ -31,7 +47,18 @@ class GradCAMExplainer:
 
         self.last_conv_layer = self._find_last_conv_layer(self.base_model)
 
-    def _load_model(self, model_path: str):
+    def _load_model(self, model_path: str) -> Any:
+        """Loads the Keras model required by the Grad-CAM pipeline.
+
+        Args:
+            model_path: Filesystem path to the .keras artifact.
+
+        Returns:
+            Any: Loaded Keras model instance.
+
+        Raises:
+            RuntimeError: If TensorFlow imports are unavailable.
+        """
         try:
             from tensorflow.keras.applications import mobilenet_v2
         except ImportError as exc:
@@ -44,7 +71,18 @@ class GradCAMExplainer:
             custom_objects={"preprocess_input": mobilenet_v2.preprocess_input},
         )
 
-    def _find_last_conv_layer(self, model) -> tf.keras.layers.Layer:
+    def _find_last_conv_layer(self, model: Any) -> tf.keras.layers.Layer:
+        """Finds the last convolutional layer used by Grad-CAM.
+
+        Args:
+            model: Keras model or submodel used for feature extraction.
+
+        Returns:
+            tf.keras.layers.Layer: Selected convolutional layer.
+
+        Raises:
+            RuntimeError: If no suitable convolutional layer is found.
+        """
         preferred_names = ["out_relu", "Conv_1"]
         for layer_name in preferred_names:
             try:
@@ -66,6 +104,14 @@ class GradCAMExplainer:
         raise RuntimeError("No convolutional layer was found in the loaded model.")
 
     def _prepare_image(self, image_bytes: bytes) -> tuple[np.ndarray, Image.Image]:
+        """Prepares input bytes for model inference and heatmap overlay.
+
+        Args:
+            image_bytes: Raw uploaded image bytes.
+
+        Returns:
+            tuple[np.ndarray, Image.Image]: Preprocessed tensor and resized PIL image.
+        """
         pil_image = Image.open(BytesIO(image_bytes)).convert("RGB")
         pil_image = pil_image.resize(self.image_size, Image.Resampling.LANCZOS)
         image_array = np.asarray(pil_image, dtype=np.float32)
@@ -74,6 +120,15 @@ class GradCAMExplainer:
         return image_array, pil_image
 
     def _make_heatmap(self, image_array: np.ndarray, class_idx: int) -> np.ndarray:
+        """Computes normalized Grad-CAM heatmap for a target class index.
+
+        Args:
+            image_array: Preprocessed image tensor with batch dimension.
+            class_idx: Target class index for gradient extraction.
+
+        Returns:
+            np.ndarray: 2D heatmap normalized to [0, 1].
+        """
         try:
             grad_model = tf.keras.Model(
                 inputs=self.base_model.input,
@@ -92,6 +147,7 @@ class GradCAMExplainer:
             if grads is None:
                 raise ValueError("Gradients are still None after extracting base_model.")
 
+            # Standard Grad-CAM: channel-wise average of gradients, then weighted sum over feature maps.
             pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
             heatmap = tf.reduce_sum(conv_outputs[0] * pooled_grads, axis=-1)
             heatmap = tf.maximum(heatmap, 0.0)
@@ -102,6 +158,15 @@ class GradCAMExplainer:
             return np.zeros(image_array.shape[1:3], dtype=np.float32)
 
     def _overlay_heatmap(self, original_image: Image.Image, heatmap: np.ndarray) -> bytes:
+        """Overlays heatmap on original image and exports PNG bytes.
+
+        Args:
+            original_image: Source PIL image.
+            heatmap: Normalized 2D heatmap.
+
+        Returns:
+            bytes: PNG bytes containing the overlay result.
+        """
         heatmap_image = np.uint8(255 * heatmap)
         heatmap_image = Image.fromarray(heatmap_image).resize(original_image.size, Image.Resampling.LANCZOS)
         heatmap_array = np.array(heatmap_image)
@@ -127,6 +192,15 @@ class GradCAMExplainer:
         return output.getvalue()
 
     def explain_image(self, image_bytes: bytes, target_class_idx: Optional[int] = None) -> bytes:
+        """Generates a Grad-CAM overlay image for the provided input bytes.
+
+        Args:
+            image_bytes: Raw image bytes.
+            target_class_idx: Optional class index; when omitted, uses top prediction.
+
+        Returns:
+            bytes: PNG bytes for the overlaid heatmap image.
+        """
         image_array, original_image = self._prepare_image(image_bytes)
         predictions = self.model.predict(image_array, verbose=0)[0]
         if target_class_idx is None:
@@ -136,5 +210,13 @@ class GradCAMExplainer:
         return self._overlay_heatmap(original_image, heatmap)
 
     def encode_heatmap(self, image_bytes: bytes) -> str:
+        """Generates a Grad-CAM heatmap and returns it as base64 string.
+
+        Args:
+            image_bytes: Raw image bytes.
+
+        Returns:
+            str: Base64-encoded PNG heatmap.
+        """
         heatmap_bytes = self.explain_image(image_bytes)
         return base64.b64encode(heatmap_bytes).decode("ascii")

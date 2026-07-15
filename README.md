@@ -1,6 +1,6 @@
-# Práctico 4: Servido de Modelos - Clasificador de Hongos con TFLite y Grad-CAM
+# Servido de Modelos - Clasificador de Hongos con TFLite y Grad-CAM
 
-Este proyecto implementa una API REST para clasificación de imágenes de hongos con FastAPI. La inferencia principal se ejecuta localmente con un modelo cuantizado TensorFlow Lite, y el artefacto `.keras` se conserva únicamente para respaldar la generación opcional de mapas de atención Grad-CAM.
+Este proyecto implementa una API REST para clasificación de imágenes de hongos con FastAPI. La inferencia principal se ejecuta localmente con un modelo cuantizado TensorFlow Lite, y el artefacto `.keras` se conserva únicamente para respaldar la generación opcional de mapas de atención Grad-CAM. El modelo clasifica en tres categorías: `Comestible`, `No comestible` y `Venenoso`.
 
 ## Resumen
 
@@ -108,12 +108,12 @@ Si la imagen supera el filtro, `src/core/preprocessing/preprocessor.py`:
 
 `src/core/classification/classifier.py` ejecuta inferencia local con TFLite y genera:
 
-- la clase top-1,
+- la clase top-1 (`Comestible`, `No comestible` o `Venenoso`),
 - su score,
 - el diccionario completo de probabilidades por etiqueta,
 - el `model_id` asociado al artefacto TFLite usado.
 
-Si el cliente envía `generate_heatmap=true`, el router además instancia `src/core/classification/explainability.py`, construye un submodelo funcional sobre el `.keras`, extrae gradientes con `tf.GradientTape` y devuelve un mapa de atención Grad-CAM codificado en base64 dentro de la respuesta.
+Si el cliente envía `generate_heatmap=true`, el router además instancia `src/core/classification/explainability.py`, construye un submodelo funcional sobre el `.keras`, extrae gradientes con `tf.GradientTape` y devuelve un mapa de atención Grad-CAM codificado  dentro de la respuesta.
 
 ## Endpoints
 
@@ -139,7 +139,7 @@ curl -X POST "http://localhost:8080/classification/images?generate_heatmap=true"
 
 ### `POST /classification/predict-batch`
 
-Procesa un archivo `.zip` con múltiples imágenes válidas y devuelve una predicción por archivo.
+Procesa un archivo `.zip` con múltiples imágenes válidas y devuelve una predicción por archivo, incluyendo confianza (`score`).
 
 Ejemplo:
 
@@ -156,14 +156,14 @@ Respuesta realista para una clasificación individual con `generate_heatmap=true
 {
    "images": [
       {
-         "filename": "amanita.png",
-         "label": "amanita_muscaria",
+         "filename": "hongo_1.png",
+         "label": "Comestible",
          "score": 0.9473,
          "metadata": {
             "scores": {
-               "amanita_muscaria": 0.9473,
-               "boletus_edulis": 0.0312,
-               "cantharellus_cibarius": 0.0215
+               "Comestible": 0.9473,
+               "No comestible": 0.0312,
+               "Venenoso": 0.0215
             }
          }
       }
@@ -190,11 +190,19 @@ Respuesta realista para batch:
    "predictions": [
       {
          "filename": "muestra_1.png",
-         "prediction": "amanita_muscaria"
+         "prediction": "Comestible",
+         "score": 0.9473
       },
       {
          "filename": "muestra_2.png",
-         "prediction": "No es un hongo!"
+         "prediction": "No es un hongo!",
+         "score": 0.0
+      },
+      {
+         "filename": "muestra_3.png",
+         "prediction": "Error",
+         "score": 0.0,
+         "error": "Error procesando imagen: cannot identify image file"
       }
    ]
 }

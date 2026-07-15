@@ -1,7 +1,7 @@
 # Project Context and Session State
 
 ## 1. Current Status
-As of 2026-07-11, this repository is a finalized model-serving project for mushroom image classification built with FastAPI, TensorFlow Lite, and an optional Grad-CAM explainability path. The production inference route is based on a quantized `.tflite` artifact, while the legacy `.keras` artifact is retained only for explanation generation.
+As of 2026-07-14, this repository is a finalized model-serving project for mushroom image classification built with FastAPI, TensorFlow Lite, and an optional Grad-CAM explainability path. The production inference route is based on a quantized `.tflite` artifact, while the legacy `.keras` artifact is retained only for explanation generation.
 
 ## 2. Purpose and Scope
 This project serves mushroom image predictions through HTTP endpoints and a lightweight Streamlit UI. The system is designed to:
@@ -108,8 +108,9 @@ Important locations:
 ### `POST /classification/predict-batch`
 - Accepts a `.zip` archive under `archive`.
 - Iterates valid `.jpg`, `.jpeg`, and `.png` members.
-- Returns a `predictions` list with per-file outcomes.
-- Non-mushroom files are returned as `"No es un hongo!"` in the batch path.
+- Returns a `predictions` list with per-file outcomes including `filename`, `prediction`, and `score`.
+- Non-mushroom files are returned as `"No es un hongo!"` with `score: 0.0`.
+- Per-file processing errors keep a consistent shape with `prediction: "Error"`, `score: 0.0`, and an `error` detail.
 
 ## 6. Verified Facts
 The following points are directly supported by the current code and tests:
@@ -119,6 +120,7 @@ The following points are directly supported by the current code and tests:
 - The preprocessor supports `UploadFile`, raw `bytes`, `bytearray`, `BytesIO`, and file-like objects.
 - The classifier converts payloads to `float32`, ensures a batch dimension, runs TFLite inference, and softmaxes outputs if needed.
 - The single-image route can append a base64 heatmap when `generate_heatmap` is requested.
+- The batch route returns a consistent schema across success, non-mushroom, and error cases.
 - The Streamlit app can call both the single-image and batch endpoints and render the heatmap next to the uploaded image.
 - Router tests cover health, single-image classification, non-mushroom rejection, heatmap behavior, batch success, and invalid ZIP handling.
 - Core tests cover classifier prediction behavior and preprocessing output shape.
@@ -142,8 +144,8 @@ Supported execution paths currently documented in the repository:
 ## 9. Recommended Next Steps
 If future work continues from this state, the highest-value follow-ups are:
 1. Measure inference latency and memory usage of the quantized TFLite path on the target CPU.
-2. Align secondary docs such as `docs/endpoints.md` with the final router contract if they still reference older payloads.
-3. Add dedicated runtime verification for the full Grad-CAM path against the real `.keras` artifact if environment setup allows it.
+2. Add dedicated runtime verification for the full Grad-CAM path against the real `.keras` artifact if environment setup allows it.
+3. Add contract tests for per-item batch error payloads (`prediction`, `score`, and `error`).
 
 ## 10. Instructions for Future AIs
 Read this file before making architectural or API-contract changes. Treat it as the current authoritative state of the repository. If a future change affects model artifacts, request/response payloads, endpoint behavior, preprocessing, explainability, or test coverage, update this file in the same session so the next agent inherits the correct project state.

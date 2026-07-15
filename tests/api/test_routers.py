@@ -168,8 +168,8 @@ def test_predict_batch_endpoint_returns_predictions_for_each_archive_file(client
     assert response.status_code == 200
     payload = response.json()
     assert payload["predictions"] == [
-        {"filename": "first.png", "prediction": "dummy"},
-        {"filename": "second.png", "prediction": "dummy"},
+        {"filename": "first.png", "prediction": "dummy", "score": 0.99},
+        {"filename": "second.png", "prediction": "dummy", "score": 0.99},
     ]
 
 

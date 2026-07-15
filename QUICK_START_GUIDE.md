@@ -134,7 +134,21 @@ zip test_batch.zip test_image1.jpg test_image2.jpg
 curl -X POST http://localhost:8080/classification/predict-batch \
   -F "archive=@test_batch.zip"
 
-# Expected response: Array of predictions
+# Expected response:
+{
+  "predictions": [
+    {
+      "filename": "test_image1.jpg",
+      "prediction": "Comestible",
+      "score": 0.93
+    },
+    {
+      "filename": "test_image2.jpg",
+      "prediction": "No es un hongo!",
+      "score": 0.0
+    }
+  ]
+}
 ```
 
 ### Test 5: Streamlit UI
