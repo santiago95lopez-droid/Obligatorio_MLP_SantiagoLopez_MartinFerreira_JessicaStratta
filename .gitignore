@@ -162,3 +162,9 @@ cython_debug/
 
 # Configuraciones del editor (VS Code)
 .vscode/
+
+/CONTEXT.md
+/IMPLEMENTATION_DETAILS.md
+/QUICK_START_GUIDE.md
+/practico_api_getrid.code-workspace
+/run_api.bat
