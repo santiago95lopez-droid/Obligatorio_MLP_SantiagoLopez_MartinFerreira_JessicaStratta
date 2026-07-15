@@ -6,9 +6,9 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      # Mapea el puerto 80 del contenedor (Streamlit) al 8501 de tu PC local
-      - "8501:80"
-      # Mapea el puerto 8080 del contenedor (FastAPI) al 8080 de tu PC local 
+      # Mapea el puerto 80 público de AWS directamente al puerto 80 del contenedor (Streamlit)
+      - "80:80"
+      # Si querés mantener la API expuesta externamente también en AWS (opcional):
       - "8080:8080"
     volumes:
       - ./src:/app/src
